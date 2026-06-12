@@ -1,4 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+
+
+
+
+
+async function setupLandmarker() {
+  const vision = await FilesetResolver.forVisionTasks(
+    // path/to/wasm/root
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+  );
+  
+  const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        // modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        modelAssetPath: "../public/models/face_landmarker.task",
+        delegate: "GPU"
+      },
+      outputFaceBlendshapes: true,
+      runningMode: "VIDEO"
+    }
+  );
+
+  return faceLandmarker;
+}
+
+const faceLandmarker = await setupLandmarker();
+
+
+// Sort Data
+function processResults(detections) {
+  const blendshapes = detections.faceBlendshapes;
+  // console.log(detections);
+  
+  if (blendshapes && blendshapes.length > 0) { // Check if data is valid for processing
+
+      blendshapes[0].categories.forEach(category => { // Use the first detected face
+          console.log(`Expression: ${category.categoryName}, Score: ${category.score}`);
+      });
+  }
+}
+
+
+
+
+
+
 
 
 // SCREEN 1 - YouTube Link Input
@@ -26,7 +74,7 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('video/')) {
+    if (file && file.type.startsWith("video/")) {
       const url = URL.createObjectURL(file);
       setVideoFile(url);
       setFileName(file.name);
@@ -48,8 +96,8 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
           videoRef.current.srcObject = stream;
         }
       } catch (error) {
-        console.error('Error accessing camera:', error);
-        alert('Unable to access camera. Please check permissions.');
+        console.error("Error accessing camera:", error);
+        alert("Unable to access camera. Please check permissions.");
       } finally {
         setIsLoadingCamera(false);
       }
@@ -96,7 +144,7 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
                   playsInline
                   muted
                   className="w-full rounded-lg bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700"
-                  style={{ maxHeight: '300px', objectFit: 'cover' }}
+                  style={{ maxHeight: "300px", objectFit: "cover" }}
                 />
               )
             }
@@ -121,7 +169,7 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
                       <p class="mb-2 text-sm text-gray-400"><span class="font-semibold">Click to upload</span> or drag and drop</p>
                       <p class="text-xs text-gray-400">MP4, MOV, MKV, ... (MAX. 200 MB)</p>
                   </div>
-                  <input id="dropzone-file" type="file" class="hidden" accept='video/*' />
+                  <input id="dropzone-file" type="file" class="hidden" accept="video/*" />
               </label>
           </div>  */}
 
@@ -239,8 +287,8 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
             disabled={isLoadingCamera || cameraStream || !fileName}
             className={`w-full font-semibold py-3 rounded-lg transition duration-200 transform ${
               isLoadingCamera || cameraStream || !fileName // disable button when input empty or 
-              ? 'bg-gray-400 dark:bg-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+              ? "bg-gray-400 dark:bg-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700 text-white hover:scale-105"
             }`}
           >
             🎬 Start Analysis
@@ -289,18 +337,50 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
     }
   }, [cameraStream]);
 
+  // Detect Expressions
+  let lastVideoTime = -1;
+
+  async function detectionLoop(camera) {
+
+    // console.log(videoRef.current.ended);
+
+    if (videoRef.current.ended)
+      return;
+
+    // Make sure the same frame doesnt get processed twice
+    if (Math.floor(camera.currentTime) !== lastVideoTime) {
+      
+      const detections = faceLandmarker.detectForVideo(camera, performance.now());
+      processResults(detections);
+      
+      lastVideoTime = Math.floor(camera.currentTime);
+    }
+    
+    // Loop function
+    requestAnimationFrame(() => {
+      detectionLoop(camera);
+    });
+  }
+
+  // Start the expression detection when the cam display is loaded
+  const handleLoadedCamera = () => {
+      // console.log(cameraRef.current);
+      lastVideoTime = -1
+      detectionLoop(cameraRef.current)
+  }
+
   // Update progress bar as video plays
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       const currentTime = videoRef.current.currentTime;
       const videoDuration = videoRef.current.duration;
       const progressPercent = (currentTime / videoDuration) * 100;
-      // console.log('time update')
+      // console.log("time update")
       setProgress(progressPercent);
     }
   };
 
-  // Get video duration when it loads
+  // Handle video load
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
@@ -309,16 +389,16 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
 
   // Format time (MM:SS)
   const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
+    if (!seconds || isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   // Handle the video finishing while avoiding unnecessary rerenders
   const handleVideoEnded = useCallback(() => {
     setVideoEnded(true);
-    console.log('video ended');
+    console.log("video ended");
   }, []);
 
 
@@ -328,7 +408,7 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
       <div className="w-full max-w-2xl">
         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-8 border border-gray-200 dark:border-slate-700">
 
-          <div className='flex justify-between'>
+          <div className="flex justify-between">
             <div>
               <h1 className="text-4xl font-bold text-black dark:text-white mb-2">
                 🎥 Analyzing Video
@@ -340,17 +420,18 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
 
             <video
               ref={cameraRef}
+              onLoadedMetadata={handleLoadedCamera}
               autoPlay
               playsInline
-              className='bg-gray-100 dark:bg-slate-800 mb-6 border border-gray-300 dark:border-slate-700 rounded-lg'
-              style={{'height':'80px'}}
+              className="bg-gray-100 dark:bg-slate-800 mb-6 border border-gray-300 dark:border-slate-700 rounded-lg"
+              style={{"height":"80px"}}
             />
           </div>
 
 
-          {/* <div className="relative w-full mb-6 bg-gray-100 dark:bg-slate-800 mb-6 border border-gray-300 dark:border-slate-700 rounded-lg" style={{ paddingBottom: '56.25%' }}>
+          {/* <div className="relative w-full mb-6 bg-gray-100 dark:bg-slate-800 mb-6 border border-gray-300 dark:border-slate-700 rounded-lg" style={{ paddingBottom: "56.25%" }}>
             <iframe 
-              // src={String(youtubeLink).replace('watch?v=', 'embed/') + '?controls=0&autoplay=1'}
+              // src={String(youtubeLink).replace("watch?v=", "embed/") + "?controls=0&autoplay=1"}
               // title="YouTube video player"
               // frameborder="0"
               // allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -367,12 +448,12 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
             ref={videoRef}
             src={videoFile}
             autoPlay={true}
-            muted={true}
+            // muted={true}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={handleVideoEnded}
             className="relative w-full mb-6 bg-gray-100 dark:bg-slate-800 mb-6 border border-gray-300 dark:border-slate-700 rounded-lg"
-            // style={{ paddingBottom: '56.25%' }}
+            // style={{ paddingBottom: "56.25%" }}
           />
 
 
@@ -395,14 +476,14 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
           </div>
 
           <div className="flex gap-4">
-            {/* view results button */}
+            {/* view results button */} 
             <button
               onClick={() => setCurrentScreen(3)}
               disabled={!videoEnded}
               className={`flex-1 font-semibold py-3 rounded-lg transition duration-200 ${
                 videoEnded
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
-                  : 'bg-gray-400 dark:bg-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed'
+                  ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                  : "bg-gray-400 dark:bg-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed"
               }`}
             >
               📈 View Results
@@ -464,7 +545,7 @@ function Screen3({ setCurrentScreen, setYoutubeLink, setEmotionData }) {
           <button
             onClick={() => {
               setCurrentScreen(1);
-              setYoutubeLink('');
+              setYoutubeLink("");
               setEmotionData([]);
             }}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200"
