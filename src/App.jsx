@@ -5,8 +5,6 @@ import { Line } from 'react-chartjs-2'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-const numOfColumns = 0;
-
 
 
 
@@ -49,13 +47,34 @@ const faceLandmarker = await setupLandmarker();
 
 
 // SCREEN 1 - YouTube Link Input
-function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, cameraStream, setCameraStream }) {
+function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, setCameraStream }) {
+  const [localStream, setLocalStream] = useState(false);
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
   const videoRef = useRef(null);
+
+  var stream;
+
+  // const camRefListener = useCallback((node) => {
+  //   if (node !== null) {
+  //     // console.log(node);
+  //     videoRef.current = node;
+  //     videoRef.current.srcObject = cameraStream;
+  //   }
+  // }, []);
   
+
+  // async function waitUntil(conditionFn, checkInterval = 100) {
+  //   while(!conditionFn()) {
+  //     console.log(videoRef);
+  //     await new Promise((resolve) => setTimeout(resolve, checkInterval));
+  //   }
+  // }
 
   // Video Upload drag handlers
   const handleVideoUpload = (e) => {
+    // console.log(videoRef);
+    // console.log(localStream);
+    videoRef.current.srcObject = localStream;
     const file = e.target.files[0];
     if (file) {
       const url = URL.createObjectURL(file);
@@ -85,15 +104,13 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
     const requestCamera = async () => {
       setIsLoadingCamera(true);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        stream = await navigator.mediaDevices.getUserMedia({ 
           video: { width: { ideal: 1280 }, height: { ideal: 720 } } 
         });
 
+        setLocalStream(stream);
         setCameraStream(stream);
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+
       } catch (error) {
         console.error("Error accessing camera:", error);
         alert("Unable to access camera. Please check permissions.");
@@ -103,21 +120,29 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
     };
 
     requestCamera();
-
+    
+    
     // Cleanup: stop camera stream when component unmounts
     return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
+  useEffect(() => {
+    if (videoRef.current && localStream) {
+      videoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-8 border border-gray-200 dark:border-slate-700">
           <h1 className="text-4xl font-bold text-black dark:text-white mb-2">
-            {/* ✨  */}Facial Expression Analyzer
+            Facial Expression Analyzer
           </h1>
           <p className="text-gray-600 dark:text-gray-300 text-lg mb-8">
             Analyze your emotions while watching videos
@@ -283,9 +308,9 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
 
           <button
             onClick={() => setCurrentScreen(2)}
-            disabled={isLoadingCamera || cameraStream || !fileName}
+            disabled={isLoadingCamera || !localStream || !fileName}
             className={`w-full font-semibold py-3 rounded-lg transition duration-200 transform ${
-              isLoadingCamera || cameraStream || !fileName // disable button when input empty or 
+              isLoadingCamera || !localStream || !fileName // disable button when input empty or 
               ? "bg-gray-400 dark:bg-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed"
               : "bg-blue-600 hover:bg-blue-700 text-white hover:scale-105"
             }`}
