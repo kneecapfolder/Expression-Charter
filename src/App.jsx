@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { Line } from 'react-chartjs-2'
 
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
+const numOfColumns = 0;
 
 
 
@@ -29,18 +33,13 @@ async function setupLandmarker() {
 const faceLandmarker = await setupLandmarker();
 
 
-// Sort Data
-function processResults(detections) {
-  const blendshapes = detections.faceBlendshapes;
-  // console.log(detections);
+// // Sort Data
+// function DataSort(happyScore, sadScore, neutralScore)
+// {
   
-  if (blendshapes && blendshapes.length > 0) { // Check if data is valid for processing
+// }
 
-      blendshapes[0].categories.forEach(category => { // Use the first detected face
-          console.log(`Expression: ${category.categoryName}, Score: ${category.score}`);
-      });
-  }
-}
+
 
 
 
@@ -322,7 +321,7 @@ function Screen1({ setVideoFile, fileName, setFileName, setCurrentScreen, camera
 
 
 // SCREEN 2 - Video Watch Screen
-function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
+function Screen2({ setLabels, setEmotionData, fileName, videoFile, cameraStream, setCurrentScreen }) {
   
   const videoRef = useRef(null);
   const cameraRef = useRef(null);
@@ -330,22 +329,23 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
   const [duration, setDuration] = useState(0);
   const [videoEnded, setVideoEnded] = useState(false);
 
-  // Update camera stream
-  useEffect(() => {
-    if (cameraStream && cameraRef.current) {
-      cameraRef.current.srcObject = cameraStream;
-    }
-  }, [cameraStream]);
+  const data = {
+    happy: [],
+    sad: [],
+    neutral: []
+  };
 
+  
+  // ==========================MEDIAPIPE INTEGRATION========================
   // Detect Expressions
   let lastVideoTime = -1;
-
   async function detectionLoop(camera) {
-
-    // console.log(videoRef.current.ended);
-
-    if (videoRef.current.ended)
+    
+    if (videoRef.current.ended) {
+      setEmotionData(data);
+      // console.log(data);
       return;
+    }
 
     // Make sure the same frame doesnt get processed twice
     if (Math.floor(camera.currentTime) !== lastVideoTime) {
@@ -361,6 +361,61 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
       detectionLoop(camera);
     });
   }
+  
+  function processResults(detections) {
+    const blendshapes = detections.faceBlendshapes;
+    // console.log(detections);
+    
+    if (!blendshapes || blendshapes.length === 0) // Make sure that the data is valid for processing
+    return;
+    
+    const shapes = {};
+    blendshapes[0].categories.forEach(category => { // Use the first detected face
+      // console.log(category.categoryName);
+      // console.log(`Expression: ${category.categoryName}, Score: ${category.score}`);
+      shapes[category.categoryName] = category.score;
+    });
+    
+    // Estimate Emotion
+    // Math formulas averaging key movement weights
+    const happyScore = (shapes["mouthSmileLeft"] + shapes["mouthSmileRight"]) / 2;
+    const sadScore = (shapes["mouthFrownLeft"] + shapes["mouthFrownRight"] + shapes["browInnerUp"]) / 3;
+    // const angryScore = (shapes["browDownLeft"] + shapes["browDownRight"] + shapes["mouthShrugUpper"]) / 3;
+    const neutralScore = 1.0 - happyScore - sadScore;
+    
+    // Threshold gate to ignore minor baseline muscle twitches
+    // const THRESHOLD = 0.25;
+    // let maxScore = THRESHOLD;
+    // let detectedEmotion = "Neutral :/";
+    
+    // if (happyScore > maxScore) { maxScore = happyScore; detectedEmotion = "Happy :)"; }
+    // if (sadScore > maxScore) { maxScore = sadScore; detectedEmotion = "Sad :("; }
+    // if (angryScore > maxScore) { maxScore = angryScore; detectedEmotion = "Angry"; }
+    
+    // console.log(detectedEmotion);
+
+    data.happy.push(happyScore);
+    data.sad.push(sadScore);
+    data.neutral.push(neutralScore);
+    
+  }
+  //========================================================================
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  // Update camera stream
+  useEffect(() => {
+    if (cameraStream && cameraRef.current) {
+      cameraRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
 
   // Start the expression detection when the cam display is loaded
   const handleLoadedCamera = () => {
@@ -384,6 +439,7 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
+      setLabels(Array.from({ length: videoRef.current.duration + 1 }, (_, i) => `${i}s`));
     }
   };
 
@@ -399,6 +455,7 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
   const handleVideoEnded = useCallback(() => {
     setVideoEnded(true);
     console.log("video ended");
+    // console.log(setEmotionData);
   }, []);
 
 
@@ -528,7 +585,77 @@ function Screen2({ fileName, videoFile, cameraStream, setCurrentScreen }) {
 
 
 // SCREEN 3 - Chart View
-function Screen3({ setCurrentScreen, setYoutubeLink, setEmotionData }) {
+function Screen3({ labels, emotionData, setCurrentScreen,  setEmotionData, setFileName, setVideoFile }) {
+  console.log(emotionData);
+  const data = {
+    labels: labels,
+    datasets: [
+      {
+        label: 'Happy',
+        data: emotionData.happy,
+        borderColor: '#fbbf24',
+        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        tension: 0.4,
+        fill: true,
+      },
+      {
+        label: 'Sad',
+        data: emotionData.sad,
+        borderColor: '#60a5fa',
+        backgroundColor: 'rgba(96, 165, 250, 0.1)',
+        tension: 0.4,
+        fill: true,
+      },
+      {
+        label: 'Neutral',
+        data: emotionData.neutral,
+        borderColor: '#acacac8e',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        tension: 0.4,
+        fill: true,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: {
+        labels: {
+          color: '#f1f5f9',
+          font: { size: 12 },
+        },
+      },
+      title: {
+        display: true,
+        text: 'Emotion Timeline',
+        color: '#f1f5f9',
+        font: { size: 16 },
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 1,
+        ticks: {
+          color: '#cbd5e1',
+        },
+        grid: {
+          color: 'rgba(203, 213, 225, 0.1)',
+        },
+      },
+      x: {
+        ticks: {
+          color: '#cbd5e1',
+        },
+        grid: {
+          color: 'rgba(203, 213, 225, 0.1)',
+        },
+      },
+    },
+  };
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
@@ -538,18 +665,47 @@ function Screen3({ setCurrentScreen, setYoutubeLink, setEmotionData }) {
           </h1>
           <p className="text-gray-600 dark:text-gray-300 mb-8">Your Emotion Timeline</p>
 
-          <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-lg h-96 flex items-center justify-center mb-6 border border-gray-300 dark:border-slate-700">
+          {/* <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-lg h-96 flex items-center justify-center mb-6 border border-gray-300 dark:border-slate-700">
             <p className="text-gray-500 dark:text-gray-400">Chart visualization will appear here</p>
+          </div> */}
+
+          {/* Chart Container */}
+          <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-6 mb-6 border border-gray-300 dark:border-slate-700">
+            <div style={{ position: 'relative'}}>
+              <Line
+                // ref={chartRef}
+                data={data}
+                options={options}
+              />
+            </div>
           </div>
+
+          {/* Stats Summary */}
+          {/* <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 border border-yellow-200 dark:border-yellow-700">
+              <p className="text-yellow-600 dark:text-yellow-400 text-sm font-semibold">Most Frequent</p>
+              <p className="text-yellow-700 dark:text-yellow-300 text-2xl font-bold">Happy</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+              <p className="text-blue-600 dark:text-blue-400 text-sm font-semibold">Average</p>
+              <p className="text-blue-700 dark:text-blue-300 text-2xl font-bold">0.45</p>
+            </div>
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-700">
+              <p className="text-green-600 dark:text-green-400 text-sm font-semibold">Peak</p>
+              <p className="text-green-700 dark:text-green-300 text-2xl font-bold">0.85</p>
+            </div>
+          </div> */}
 
           <button
             onClick={() => {
-              setCurrentScreen(1);
-              setYoutubeLink("");
-              setEmotionData([]);
-            }}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200"
-          >
+                setCurrentScreen(1);
+                // setYoutubeLink("");
+                setEmotionData([]);
+                setFileName(null)
+                setVideoFile(null)
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+            >
             🔄 Analyze Another Video
           </button>
         </div>
@@ -573,11 +729,13 @@ function Screen3({ setCurrentScreen, setYoutubeLink, setEmotionData }) {
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState(1);
-  const [youtubeLink, setYoutubeLink] = useState('');
-  const [emotionData, setEmotionData] = useState([]);
+  const [emotionData, setEmotionData] = useState({});
+  // const [labels, setLabels] = useState(Array.from({ length: 10 }, (_, i) => `${i}s`));
+  const [labels, setLabels] = useState([]);
   const [cameraStream, setCameraStream] = useState(null);
   const [videoFile, setVideoFile] = useState(null);
   const [fileName, setFileName] = useState(null);
+
 
   return (
     <div>
@@ -593,6 +751,8 @@ function App() {
       )}
       {currentScreen === 2 && (
         <Screen2 
+          setLabels={setLabels} 
+          setEmotionData={setEmotionData} 
           fileName={fileName} 
           videoFile={videoFile} 
           cameraStream={cameraStream} 
@@ -601,9 +761,13 @@ function App() {
       )}
       {currentScreen === 3 && (
         <Screen3 
+          labels={labels}
+          emotionData={emotionData}
           setCurrentScreen={setCurrentScreen} 
-          setYoutubeLink={setYoutubeLink} 
+          // setYoutubeLink={setYoutubeLink} 
           setEmotionData={setEmotionData} 
+          setFileName={setFileName}
+          setVideoFile={setVideoFile}
         />
       )}
     </div>
