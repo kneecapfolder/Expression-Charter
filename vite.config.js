@@ -8,5 +8,5 @@ export default defineConfig({
         react(),
         tailwindcss(),
     ],
-    bsae: '/Expression-Charter/'
+    base: '/Expression-Charter/'
 })
