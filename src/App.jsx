@@ -407,6 +407,8 @@ function Screen2({ setLabels, setEmotionData, fileName, videoFile, cameraStream,
     const sadScore = (shapes["mouthFrownLeft"] + shapes["mouthFrownRight"] + shapes["browInnerUp"]) / 3;
     // const angryScore = (shapes["browDownLeft"] + shapes["browDownRight"] + shapes["mouthShrugUpper"]) / 3;
     const neutralScore = 1.0 - happyScore - sadScore;
+    if (neutralScore < 0)
+      neutralScore = 0;
     
     // Threshold gate to ignore minor baseline muscle twitches
     // const THRESHOLD = 0.25;
@@ -447,6 +449,7 @@ function Screen2({ setLabels, setEmotionData, fileName, videoFile, cameraStream,
       // console.log(cameraRef.current);
       lastVideoTime = -1
       detectionLoop(cameraRef.current)
+      videoRef.current.play()
   }
 
   // Update progress bar as video plays
@@ -529,7 +532,6 @@ function Screen2({ setLabels, setEmotionData, fileName, videoFile, cameraStream,
           <video
             ref={videoRef}
             src={videoFile}
-            autoPlay={true}
             // muted={true}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
