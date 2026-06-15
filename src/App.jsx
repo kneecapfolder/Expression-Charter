@@ -406,9 +406,7 @@ function Screen2({ setLabels, setEmotionData, fileName, videoFile, cameraStream,
     const happyScore = (shapes["mouthSmileLeft"] + shapes["mouthSmileRight"]) / 2;
     const sadScore = (shapes["mouthFrownLeft"] + shapes["mouthFrownRight"] + shapes["browInnerUp"]) / 3;
     // const angryScore = (shapes["browDownLeft"] + shapes["browDownRight"] + shapes["mouthShrugUpper"]) / 3;
-    const neutralScore = 1.0 - happyScore - sadScore;
-    if (neutralScore < 0)
-      neutralScore = 0;
+    const neutralScore = (1.0 - happyScore - sadScore) < 0? 0 : (1.0 - happyScore - sadScore);
     
     // Threshold gate to ignore minor baseline muscle twitches
     // const THRESHOLD = 0.25;
